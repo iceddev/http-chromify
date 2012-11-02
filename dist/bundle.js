@@ -8,12 +8,12 @@ var require = function (file, cwd) {
     var cached = require.cache[resolved];
     var res = cached? cached.exports : mod();
     return res;
-}
+};
 
 require.paths = [];
 require.modules = {};
 require.cache = {};
-require.extensions = [".js",".coffee"];
+require.extensions = [".js",".coffee",".json"];
 
 require._core = {
     'assert': true,
@@ -140,10 +140,13 @@ require.alias = function (from, to) {
 
 (function () {
     var process = {};
+    var global = typeof window !== 'undefined' ? window : {};
+    var definedProcess = false;
     
     require.define = function (filename, fn) {
-        if (require.modules.__browserify_process) {
+        if (!definedProcess && require.modules.__browserify_process) {
             process = require.modules.__browserify_process();
+            definedProcess = true;
         }
         
         var dirname = require._core[filename]
@@ -152,7 +155,14 @@ require.alias = function (from, to) {
         ;
         
         var require_ = function (file) {
-            return require(file, dirname);
+            var requiredModule = require(file, dirname);
+            var cached = require.cache[require.resolve(file, dirname)];
+
+            if (cached && cached.parent === null) {
+                cached.parent = module_;
+            }
+
+            return requiredModule;
         };
         require_.resolve = function (name) {
             return require.resolve(name, dirname);
@@ -160,7 +170,13 @@ require.alias = function (from, to) {
         require_.modules = require.modules;
         require_.define = require.define;
         require_.cache = require.cache;
-        var module_ = { exports : {} };
+        var module_ = {
+            id : filename,
+            filename: filename,
+            exports : {},
+            loaded : false,
+            parent: null
+        };
         
         require.modules[filename] = function () {
             require.cache[filename] = module_;
@@ -171,15 +187,17 @@ require.alias = function (from, to) {
                 module_.exports,
                 dirname,
                 filename,
-                process
+                process,
+                global
             );
+            module_.loaded = true;
             return module_.exports;
         };
     };
 })();
 
 
-require.define("path",function(require,module,exports,__dirname,__filename,process){function filter (xs, fn) {
+require.define("path",function(require,module,exports,__dirname,__filename,process,global){function filter (xs, fn) {
     var res = [];
     for (var i = 0; i < xs.length; i++) {
         if (fn(xs[i], i, xs)) res.push(xs[i]);
@@ -313,17 +331,24 @@ exports.basename = function(path, ext) {
 exports.extname = function(path) {
   return splitPathRe.exec(path)[3] || '';
 };
+
 });
 
-require.define("__browserify_process",function(require,module,exports,__dirname,__filename,process){var process = module.exports = {};
+require.define("__browserify_process",function(require,module,exports,__dirname,__filename,process,global){var process = module.exports = {};
 
 process.nextTick = (function () {
-    var queue = [];
+    var canSetImmediate = typeof window !== 'undefined'
+        && window.setImmediate;
     var canPost = typeof window !== 'undefined'
         && window.postMessage && window.addEventListener
     ;
-    
+
+    if (canSetImmediate) {
+        return window.setImmediate;
+    }
+
     if (canPost) {
+        var queue = [];
         window.addEventListener('message', function (ev) {
             if (ev.source === window && ev.data === 'browserify-tick') {
                 ev.stopPropagation();
@@ -333,14 +358,15 @@ process.nextTick = (function () {
                 }
             }
         }, true);
-    }
-    
-    return function (fn) {
-        if (canPost) {
+
+        return function nextTick(fn) {
             queue.push(fn);
             window.postMessage('browserify-tick', '*');
-        }
-        else setTimeout(fn, 0);
+        };
+    }
+
+    return function nextTick(fn) {
+        setTimeout(fn, 0);
     };
 })();
 
@@ -363,11 +389,13 @@ process.binding = function (name) {
         cwd = path.resolve(dir, cwd);
     };
 })();
+
 });
 
-require.define("/node_modules/net-browserify/package.json",function(require,module,exports,__dirname,__filename,process){module.exports = {"main":"index.js"}});
+require.define("/node_modules/net-browserify/package.json",function(require,module,exports,__dirname,__filename,process,global){module.exports = {"main":"index.js"}
+});
 
-require.define("/node_modules/net-browserify/index.js",function(require,module,exports,__dirname,__filename,process){/*
+require.define("/node_modules/net-browserify/index.js",function(require,module,exports,__dirname,__filename,process,global){/*
    Copyright 2012 Google Inc
 
    Licensed under the Apache License, Version 2.0 (the "License");
@@ -399,7 +427,7 @@ var stringToArrayBuffer = function(str) {
 };
 
 var bufferToArrayBuffer = function(buffer) {
-  return stringToArrayBuffer(buf.toString());
+  return stringToArrayBuffer(buf.toString())
 };
 
 var arrayBufferToBuffer = function(arrayBuffer) {
@@ -428,7 +456,7 @@ net.createServer = function() {
   return server;
 };
 
-net.connect = net.createConnection = function() {
+net.connect = net.createConnection = function() { 
   var options = {};
   var args = arguments;
   if(typeof args[0] === 'object') {
@@ -449,7 +477,7 @@ net.connect = net.createConnection = function() {
   var cb = args[args.length -1];
   cb = (typeof cb === 'function') ? cb : function() {};
   
-  var socket = new net.Socket(options, function() {
+  var socket = new net.Socket(options, function() { 
     socket.connect(options, cb);
   });
   
@@ -504,22 +532,19 @@ net.Server.prototype.listen = function() {
     // Socket created, now turn it into a server socket.
     chrome.socket.listen(self._serverSocket._socketInfo.socketId, options.host, options.port, options.backlog, function() {
       self.emit('listening');
-      chrome.socket.accept(self._serverSocket._socketInfo.socketId, self._accept.bind(self));
-    });
+      chrome.socket.accept(self._serverSocket._socketInfo.socketId, self._accept.bind(self))
+    }); 
   });
-
-  console.log('listen',self);
 };
 
 net.Server.prototype._accept = function(acceptInfo) {
-  console.log('Socket._accept');
   // Create a new socket for the handle the response.
   var self = this;
   var socket = new net.Socket();
   
   socket._socketInfo = acceptInfo;
   self.emit("connection", socket);
-  chrome.socket.accept(self._serverSocket._socketInfo.socketId, self._accept.bind(self));
+  chrome.socket.accept(self._serverSocket._socketInfo.socketId, self._accept.bind(self))
 };
 
 net.Server.prototype.close = function(callback) {
@@ -542,11 +567,10 @@ net.Socket = function(options) {
   
   chrome.socket.create("tcp", {}, function(createInfo) {
     self._socketInfo = createInfo;
-    self.emit("_created"); // This event doesn't exist in the API, it is here because Chrome is async
+    self.emit("_created"); // This event doesn't exist in the API, it is here because Chrome is async 
     // start trying to read
     self._read();
   });
-  console.log('Socket',this);
 };
 
 util.inherits(net.Socket, Stream);
@@ -567,7 +591,6 @@ util.inherits(net.Socket, Stream);
 */
 
 net.Socket.prototype.connect = function() {
-  console.log('Socket.connect');
   var self = this;
   var options = {};
   var args = arguments;
@@ -576,7 +599,7 @@ net.Socket.prototype.connect = function() {
     // we have an options object.
     options.port = args[0].port;
     options.host = args[0].host || "127.0.0.1";
-  }
+  } 
   else if (typeof args[0] === 'string') {
     // throw an error, we can't do named pipes.
   }
@@ -596,7 +619,7 @@ net.Socket.prototype.connect = function() {
   chrome.socket.connect(self._socketInfo.socketId, options.host, options.port, function(result) {
     if(result == 0) {
       self.emit('connect');
-    }
+    } 
     else {
       self.emit('error', new Error("Unable to connect"));
     }
@@ -624,11 +647,9 @@ net.Socket.prototype.setKeepAlive = function(enable, delay) {
 };
 
 net.Socket.prototype._read = function() {
-  // console.log('Socket._read');
   var self = this;
   chrome.socket.read(self._socketInfo.socketId, function(readInfo) {
-    // console.log('Socket._read - mchrome.socket.read');
-    if(readInfo.resultCode < 0) return;
+    if(readInfo.resultCode < 0) return; 
     // ArrayBuffer to Buffer if no encoding.
     var buffer = arrayBufferToBuffer(readInfo.data);
     self.emit('data', buffer);
@@ -636,10 +657,9 @@ net.Socket.prototype._read = function() {
 
   // enque another read soon. TODO: Is there are better way to controll speed.
   self._readTimer = setTimeout(self._read.bind(self), 100);
-};
+}
 
 net.Socket.prototype.write = function(data, encoding, callback) {
-  console.log('Socket.write');
   var buffer;
   var self = this;
   
@@ -659,7 +679,7 @@ net.Socket.prototype.write = function(data, encoding, callback) {
   self._resetTimeout();
 
   chrome.socket.write(self._socketInfo.socketId, buffer, function(writeInfo) {
-    callback();
+    callback(); 
   });
 
   return true;
@@ -692,9 +712,10 @@ Object.defineProperty(net.Socket.prototype, 'readyState', {
 Object.defineProperty(net.Socket.prototype, 'bufferSize', {
   get: function() {}
 });
+
 });
 
-require.define("events",function(require,module,exports,__dirname,__filename,process){if (!process.EventEmitter) process.EventEmitter = function () {};
+require.define("events",function(require,module,exports,__dirname,__filename,process,global){if (!process.EventEmitter) process.EventEmitter = function () {};
 
 var EventEmitter = exports.EventEmitter = process.EventEmitter;
 var isArray = typeof Array.isArray === 'function'
@@ -865,9 +886,10 @@ EventEmitter.prototype.listeners = function(type) {
   }
   return this._events[type];
 };
+
 });
 
-require.define("util",function(require,module,exports,__dirname,__filename,process){var events = require('events');
+require.define("util",function(require,module,exports,__dirname,__filename,process,global){var events = require('events');
 
 exports.print = function () {};
 exports.puts = function () {};
@@ -1179,9 +1201,44 @@ exports.inherits = function(ctor, superCtor) {
     }
   });
 };
+
+var formatRegExp = /%[sdj%]/g;
+exports.format = function(f) {
+  if (typeof f !== 'string') {
+    var objects = [];
+    for (var i = 0; i < arguments.length; i++) {
+      objects.push(exports.inspect(arguments[i]));
+    }
+    return objects.join(' ');
+  }
+
+  var i = 1;
+  var args = arguments;
+  var len = args.length;
+  var str = String(f).replace(formatRegExp, function(x) {
+    if (x === '%%') return '%';
+    if (i >= len) return x;
+    switch (x) {
+      case '%s': return String(args[i++]);
+      case '%d': return Number(args[i++]);
+      case '%j': return JSON.stringify(args[i++]);
+      default:
+        return x;
+    }
+  });
+  for(var x = args[i]; i < len; x = args[++i]){
+    if (x === null || typeof x !== 'object') {
+      str += ' ' + x;
+    } else {
+      str += ' ' + exports.inspect(x);
+    }
+  }
+  return str;
+};
+
 });
 
-require.define("stream",function(require,module,exports,__dirname,__filename,process){var events = require('events');
+require.define("stream",function(require,module,exports,__dirname,__filename,process,global){var events = require('events');
 var util = require('util');
 
 function Stream() {
@@ -1300,9 +1357,16 @@ Stream.prototype.pipe = function(dest, options) {
   // Allow for unix-like usage: A.pipe(B).pipe(C)
   return dest;
 };
+
 });
 
-require.define("buffer",function(require,module,exports,__dirname,__filename,process){function SlowBuffer (size) {
+require.define("buffer",function(require,module,exports,__dirname,__filename,process,global){module.exports = require("buffer-browserify")
+});
+
+require.define("/node_modules/buffer-browserify/package.json",function(require,module,exports,__dirname,__filename,process,global){module.exports = {"main":"index.js","browserify":"index.js"}
+});
+
+require.define("/node_modules/buffer-browserify/index.js",function(require,module,exports,__dirname,__filename,process,global){function SlowBuffer (size) {
     this.length = size;
 };
 
@@ -1316,6 +1380,118 @@ function toHex(n) {
   return n.toString(16);
 }
 
+function utf8ToBytes(str) {
+  var byteArray = [];
+  for (var i = 0; i < str.length; i++)
+    if (str.charCodeAt(i) <= 0x7F)
+      byteArray.push(str.charCodeAt(i));
+    else {
+      var h = encodeURIComponent(str.charAt(i)).substr(1).split('%');
+      for (var j = 0; j < h.length; j++)
+        byteArray.push(parseInt(h[j], 16));
+    }
+
+  return byteArray;
+}
+
+function asciiToBytes(str) {
+  var byteArray = []
+  for (var i = 0; i < str.length; i++ )
+    // Node's code seems to be doing this and not & 0x7F..
+    byteArray.push( str.charCodeAt(i) & 0xFF );
+
+  return byteArray;
+}
+
+function base64ToBytes(str) {
+  return require("base64-js").toByteArray(str);
+}
+
+SlowBuffer.byteLength = function (str, encoding) {
+  switch (encoding || "utf8") {
+    case 'hex':
+      return str.length / 2;
+
+    case 'utf8':
+    case 'utf-8':
+      return utf8ToBytes(str).length;
+
+    case 'ascii':
+      return str.length;
+
+    case 'base64':
+      return base64ToBytes(str).length;
+
+    default:
+      throw new Error('Unknown encoding');
+  }
+};
+
+function blitBuffer(src, dst, offset, length) {
+  var pos, i = 0;
+  while (i < length) {
+    if ((i+offset >= dst.length) || (i >= src.length))
+      break;
+
+    dst[i + offset] = src[i];
+    i++;
+  }
+  return i;
+}
+
+SlowBuffer.prototype.utf8Write = function (string, offset, length) {
+  var bytes, pos;
+  return SlowBuffer._charsWritten =  blitBuffer(utf8ToBytes(string), this, offset, length);
+};
+
+SlowBuffer.prototype.asciiWrite = function (string, offset, length) {
+  var bytes, pos;
+  return SlowBuffer._charsWritten =  blitBuffer(asciiToBytes(string), this, offset, length);
+};
+
+SlowBuffer.prototype.base64Write = function (string, offset, length) {
+  var bytes, pos;
+  return SlowBuffer._charsWritten = blitBuffer(base64ToBytes(string), this, offset, length);
+};
+
+SlowBuffer.prototype.base64Slice = function (start, end) {
+  var bytes = Array.prototype.slice.apply(this, arguments)
+  return require("base64-js").fromByteArray(bytes);
+}
+
+function decodeUtf8Char(str) {
+  try {
+    return decodeURIComponent(str);
+  } catch (err) {
+    return String.fromCharCode(0xFFFD); // UTF 8 invalid char
+  }
+}
+
+SlowBuffer.prototype.utf8Slice = function () {
+  var bytes = Array.prototype.slice.apply(this, arguments);
+  var res = "";
+  var tmp = "";
+  var i = 0;
+  while (i < bytes.length) {
+    if (bytes[i] <= 0x7F) {
+      res += decodeUtf8Char(tmp) + String.fromCharCode(bytes[i]);
+      tmp = "";
+    } else
+      tmp += "%" + bytes[i].toString(16);
+
+    i++;
+  }
+
+  return res + decodeUtf8Char(tmp);
+}
+
+SlowBuffer.prototype.asciiSlice = function () {
+  var bytes = Array.prototype.slice.apply(this, arguments);
+  var ret = "";
+  for (var i = 0; i < bytes.length; i++)
+    ret += String.fromCharCode(bytes[i]);
+  return ret;
+}
 
 SlowBuffer.prototype.inspect = function() {
   var out = [],
@@ -2052,7 +2228,7 @@ function readFloat(buffer, offset, isBigEndian, noAssert) {
         'Trying to read beyond buffer length');
   }
 
-  return require('buffer_ieee754').readIEEE754(buffer, offset, isBigEndian,
+  return require('./buffer_ieee754').readIEEE754(buffer, offset, isBigEndian,
       23, 4);
 }
 
@@ -2073,7 +2249,7 @@ function readDouble(buffer, offset, isBigEndian, noAssert) {
         'Trying to read beyond buffer length');
   }
 
-  return require('buffer_ieee754').readIEEE754(buffer, offset, isBigEndian,
+  return require('./buffer_ieee754').readIEEE754(buffer, offset, isBigEndian,
       52, 8);
 }
 
@@ -2123,7 +2299,7 @@ Buffer.prototype.writeUInt8 = function(value, offset, noAssert) {
     verifuint(value, 0xff);
   }
 
-  buffer[offset] = value;
+  buffer.parent[buffer.offset + offset] = value;
 };
 
 function writeUInt16(buffer, value, offset, isBigEndian, noAssert) {
@@ -2144,11 +2320,11 @@ function writeUInt16(buffer, value, offset, isBigEndian, noAssert) {
   }
 
   if (isBigEndian) {
-    buffer[offset] = (value & 0xff00) >>> 8;
-    buffer[offset + 1] = value & 0x00ff;
+    buffer.parent[buffer.offset + offset] = (value & 0xff00) >>> 8;
+    buffer.parent[buffer.offset + offset + 1] = value & 0x00ff;
   } else {
-    buffer[offset + 1] = (value & 0xff00) >>> 8;
-    buffer[offset] = value & 0x00ff;
+    buffer.parent[buffer.offset + offset + 1] = (value & 0xff00) >>> 8;
+    buffer.parent[buffer.offset + offset] = value & 0x00ff;
   }
 }
 
@@ -2178,15 +2354,15 @@ function writeUInt32(buffer, value, offset, isBigEndian, noAssert) {
   }
 
   if (isBigEndian) {
-    buffer[offset] = (value >>> 24) & 0xff;
-    buffer[offset + 1] = (value >>> 16) & 0xff;
-    buffer[offset + 2] = (value >>> 8) & 0xff;
-    buffer[offset + 3] = value & 0xff;
+    buffer.parent[buffer.offset + offset] = (value >>> 24) & 0xff;
+    buffer.parent[buffer.offset + offset + 1] = (value >>> 16) & 0xff;
+    buffer.parent[buffer.offset + offset + 2] = (value >>> 8) & 0xff;
+    buffer.parent[buffer.offset + offset + 3] = value & 0xff;
   } else {
-    buffer[offset + 3] = (value >>> 24) & 0xff;
-    buffer[offset + 2] = (value >>> 16) & 0xff;
-    buffer[offset + 1] = (value >>> 8) & 0xff;
-    buffer[offset] = value & 0xff;
+    buffer.parent[buffer.offset + offset + 3] = (value >>> 24) & 0xff;
+    buffer.parent[buffer.offset + offset + 2] = (value >>> 16) & 0xff;
+    buffer.parent[buffer.offset + offset + 1] = (value >>> 8) & 0xff;
+    buffer.parent[buffer.offset + offset] = value & 0xff;
   }
 }
 
@@ -2363,7 +2539,7 @@ function writeFloat(buffer, value, offset, isBigEndian, noAssert) {
     verifIEEE754(value, 3.4028234663852886e+38, -3.4028234663852886e+38);
   }
 
-  require('buffer_ieee754').writeIEEE754(buffer, value, offset, isBigEndian,
+  require('./buffer_ieee754').writeIEEE754(buffer, value, offset, isBigEndian,
       23, 4);
 }
 
@@ -2392,7 +2568,7 @@ function writeDouble(buffer, value, offset, isBigEndian, noAssert) {
     verifIEEE754(value, 1.7976931348623157E+308, -1.7976931348623157E+308);
   }
 
-  require('buffer_ieee754').writeIEEE754(buffer, value, offset, isBigEndian,
+  require('./buffer_ieee754').writeIEEE754(buffer, value, offset, isBigEndian,
       52, 8);
 }
 
@@ -2432,9 +2608,10 @@ SlowBuffer.prototype.writeFloatLE = Buffer.prototype.writeFloatLE;
 SlowBuffer.prototype.writeFloatBE = Buffer.prototype.writeFloatBE;
 SlowBuffer.prototype.writeDoubleLE = Buffer.prototype.writeDoubleLE;
 SlowBuffer.prototype.writeDoubleBE = Buffer.prototype.writeDoubleBE;
+
 });
 
-require.define("assert",function(require,module,exports,__dirname,__filename,process){// UTILITY
+require.define("assert",function(require,module,exports,__dirname,__filename,process,global){// UTILITY
 var util = require('util');
 var Buffer = require("buffer").Buffer;
 var pSlice = Array.prototype.slice;
@@ -2737,9 +2914,100 @@ assert.doesNotThrow = function(block, /*optional*/error, /*optional*/message) {
 };
 
 assert.ifError = function(err) { if (err) {throw err;}};
+
 });
 
-require.define("buffer_ieee754",function(require,module,exports,__dirname,__filename,process){exports.readIEEE754 = function(buffer, offset, isBE, mLen, nBytes) {
+require.define("/node_modules/buffer-browserify/node_modules/base64-js/package.json",function(require,module,exports,__dirname,__filename,process,global){module.exports = {"main":"lib/b64.js"}
+});
+
+require.define("/node_modules/buffer-browserify/node_modules/base64-js/lib/b64.js",function(require,module,exports,__dirname,__filename,process,global){(function (exports) {
+	'use strict';
+
+	var lookup = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+
+	function b64ToByteArray(b64) {
+		var i, j, l, tmp, placeHolders, arr;
+	
+		if (b64.length % 4 > 0) {
+			throw 'Invalid string. Length must be a multiple of 4';
+		}
+
+		// the number of equal signs (place holders)
+		// if there are two placeholders, than the two characters before it
+		// represent one byte
+		// if there is only one, then the three characters before it represent 2 bytes
+		// this is just a cheap hack to not do indexOf twice
+		placeHolders = b64.indexOf('=');
+		placeHolders = placeHolders > 0 ? b64.length - placeHolders : 0;
+
+		// base64 is 4/3 + up to two characters of the original data
+		arr = [];//new Uint8Array(b64.length * 3 / 4 - placeHolders);
+
+		// if there are placeholders, only get up to the last complete 4 chars
+		l = placeHolders > 0 ? b64.length - 4 : b64.length;
+
+		for (i = 0, j = 0; i < l; i += 4, j += 3) {
+			tmp = (lookup.indexOf(b64[i]) << 18) | (lookup.indexOf(b64[i + 1]) << 12) | (lookup.indexOf(b64[i + 2]) << 6) | lookup.indexOf(b64[i + 3]);
+			arr.push((tmp & 0xFF0000) >> 16);
+			arr.push((tmp & 0xFF00) >> 8);
+			arr.push(tmp & 0xFF);
+		}
+
+		if (placeHolders === 2) {
+			tmp = (lookup.indexOf(b64[i]) << 2) | (lookup.indexOf(b64[i + 1]) >> 4);
+			arr.push(tmp & 0xFF);
+		} else if (placeHolders === 1) {
+			tmp = (lookup.indexOf(b64[i]) << 10) | (lookup.indexOf(b64[i + 1]) << 4) | (lookup.indexOf(b64[i + 2]) >> 2);
+			arr.push((tmp >> 8) & 0xFF);
+			arr.push(tmp & 0xFF);
+		}
+
+		return arr;
+	}
+
+	function uint8ToBase64(uint8) {
+		var i,
+			extraBytes = uint8.length % 3, // if we have 1 byte left, pad 2 bytes
+			output = "",
+			temp, length;
+
+		function tripletToBase64 (num) {
+			return lookup[num >> 18 & 0x3F] + lookup[num >> 12 & 0x3F] + lookup[num >> 6 & 0x3F] + lookup[num & 0x3F];
+		};
+
+		// go through the array every three bytes, we'll deal with trailing stuff later
+		for (i = 0, length = uint8.length - extraBytes; i < length; i += 3) {
+			temp = (uint8[i] << 16) + (uint8[i + 1] << 8) + (uint8[i + 2]);
+			output += tripletToBase64(temp);
+		}
+
+		// pad the end with zeros, but make sure to not forget the extra bytes
+		switch (extraBytes) {
+			case 1:
+				temp = uint8[uint8.length - 1];
+				output += lookup[temp >> 2];
+				output += lookup[(temp << 4) & 0x3F];
+				output += '==';
+				break;
+			case 2:
+				temp = (uint8[uint8.length - 2] << 8) + (uint8[uint8.length - 1]);
+				output += lookup[temp >> 10];
+				output += lookup[(temp >> 4) & 0x3F];
+				output += lookup[(temp << 2) & 0x3F];
+				output += '=';
+				break;
+		}
+
+		return output;
+	}
+
+	module.exports.toByteArray = b64ToByteArray;
+	module.exports.fromByteArray = uint8ToBase64;
+}());
+
+});
+
+require.define("/node_modules/buffer-browserify/buffer_ieee754.js",function(require,module,exports,__dirname,__filename,process,global){exports.readIEEE754 = function(buffer, offset, isBE, mLen, nBytes) {
   var e, m,
       eLen = nBytes * 8 - mLen - 1,
       eMax = (1 << eLen) - 1,
@@ -2823,9 +3091,10 @@ exports.writeIEEE754 = function(buffer, value, offset, isBE, mLen, nBytes) {
 
   buffer[offset + i - d] |= s * 128;
 };
+
 });
 
-require.define("url",function(require,module,exports,__dirname,__filename,process){var punycode = { encode : function (s) { return s } };
+require.define("url",function(require,module,exports,__dirname,__filename,process,global){var punycode = { encode : function (s) { return s } };
 
 exports.parse = urlParse;
 exports.resolve = urlResolve;
@@ -3429,9 +3698,10 @@ function parseHost(host) {
   if (host) out.hostname = host;
   return out;
 }
+
 });
 
-require.define("querystring",function(require,module,exports,__dirname,__filename,process){var isArray = typeof Array.isArray === 'function'
+require.define("querystring",function(require,module,exports,__dirname,__filename,process,global){var isArray = typeof Array.isArray === 'function'
     ? Array.isArray
     : function (xs) {
         return Object.prototype.toString.call(xs) === '[object Array]'
@@ -3681,9 +3951,10 @@ function lastBraceInKey(str) {
     if ('=' == c && !brace) return i;
   }
 }
+
 });
 
-require.define("/lib/freelist.js",function(require,module,exports,__dirname,__filename,process){// Copyright Joyent, Inc. and other Node contributors.
+require.define("/lib/freelist.js",function(require,module,exports,__dirname,__filename,process,global){// Copyright Joyent, Inc. and other Node contributors.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
 // copy of this software and associated documentation files (the
@@ -3726,11 +3997,13 @@ exports.FreeList.prototype.free = function(obj) {
     this.list.push(obj);
   }
 };
+
 });
 
-require.define("/node_modules/http-parser-js/package.json",function(require,module,exports,__dirname,__filename,process){module.exports = {"main":"http-parser.js"}});
+require.define("/node_modules/http-parser-js/package.json",function(require,module,exports,__dirname,__filename,process,global){module.exports = {"main":"http-parser.js"}
+});
 
-require.define("/node_modules/http-parser-js/http-parser.js",function(require,module,exports,__dirname,__filename,process){exports.HTTPParser = HTTPParser;
+require.define("/node_modules/http-parser-js/http-parser.js",function(require,module,exports,__dirname,__filename,process,global){exports.HTTPParser = HTTPParser;
 function HTTPParser(type) {
   this["INIT_" + type]();
 }
@@ -3808,9 +4081,10 @@ HTTPParser.prototype.HEADER = function () {
 
 
 
+
 });
 
-require.define("/lib/string_decoder.js",function(require,module,exports,__dirname,__filename,process){// Copyright Joyent, Inc. and other Node contributors.
+require.define("/lib/string_decoder.js",function(require,module,exports,__dirname,__filename,process,global){// Copyright Joyent, Inc. and other Node contributors.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
 // copy of this software and associated documentation files (the
@@ -3992,11 +4266,12 @@ function base64DetectIncompleteChar(buffer) {
   this.charLength = incomplete ? 3 : 0;
   return incomplete;
 }
+
 });
 
 require.alias("net-browserify", "/node_modules/net");
 
-require.define("/http.js",function(require,module,exports,__dirname,__filename,process){// Copyright Joyent, Inc. and other Node contributors.
+require.define("/http.js",function(require,module,exports,__dirname,__filename,process,global){// Copyright Joyent, Inc. and other Node contributors.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
 // copy of this software and associated documentation files (the
@@ -5842,6 +6117,7 @@ Client.prototype.request = function(method, path, headers) {
   });
   return c;
 };
+
 
 });
 require("/http.js");

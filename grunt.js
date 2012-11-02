@@ -5,7 +5,7 @@ module.exports = function(grunt) {
   var browserifyConfig = {
     entries: ['http.js'],
     options: {
-      exports: ['require'],
+      exports: ['require', 'http'],
       require: {
         net: 'net-browserify'
       }
