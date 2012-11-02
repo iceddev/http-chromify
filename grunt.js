@@ -3,7 +3,7 @@ module.exports = function(grunt) {
   'use strict';
 
   var browserifyConfig = {
-    entries: ['index.js'],
+    entries: ['http.js'],
     options: {
       exports: ['require'],
       require: {

@@ -399,7 +399,7 @@ var stringToArrayBuffer = function(str) {
 };
 
 var bufferToArrayBuffer = function(buffer) {
-  return stringToArrayBuffer(buf.toString())
+  return stringToArrayBuffer(buf.toString());
 };
 
 var arrayBufferToBuffer = function(arrayBuffer) {
@@ -428,7 +428,7 @@ net.createServer = function() {
   return server;
 };
 
-net.connect = net.createConnection = function() { 
+net.connect = net.createConnection = function() {
   var options = {};
   var args = arguments;
   if(typeof args[0] === 'object') {
@@ -449,7 +449,7 @@ net.connect = net.createConnection = function() {
   var cb = args[args.length -1];
   cb = (typeof cb === 'function') ? cb : function() {};
   
-  var socket = new net.Socket(options, function() { 
+  var socket = new net.Socket(options, function() {
     socket.connect(options, cb);
   });
   
@@ -504,19 +504,22 @@ net.Server.prototype.listen = function() {
     // Socket created, now turn it into a server socket.
     chrome.socket.listen(self._serverSocket._socketInfo.socketId, options.host, options.port, options.backlog, function() {
       self.emit('listening');
-      chrome.socket.accept(self._serverSocket._socketInfo.socketId, self._accept.bind(self))
-    }); 
+      chrome.socket.accept(self._serverSocket._socketInfo.socketId, self._accept.bind(self));
+    });
   });
+
+  console.log('listen',self);
 };
 
 net.Server.prototype._accept = function(acceptInfo) {
+  console.log('Socket._accept');
   // Create a new socket for the handle the response.
   var self = this;
   var socket = new net.Socket();
   
   socket._socketInfo = acceptInfo;
   self.emit("connection", socket);
-  chrome.socket.accept(self._serverSocket._socketInfo.socketId, self._accept.bind(self))
+  chrome.socket.accept(self._serverSocket._socketInfo.socketId, self._accept.bind(self));
 };
 
 net.Server.prototype.close = function(callback) {
@@ -539,10 +542,11 @@ net.Socket = function(options) {
   
   chrome.socket.create("tcp", {}, function(createInfo) {
     self._socketInfo = createInfo;
-    self.emit("_created"); // This event doesn't exist in the API, it is here because Chrome is async 
+    self.emit("_created"); // This event doesn't exist in the API, it is here because Chrome is async
     // start trying to read
     self._read();
   });
+  console.log('Socket',this);
 };
 
 util.inherits(net.Socket, Stream);
@@ -563,6 +567,7 @@ util.inherits(net.Socket, Stream);
 */
 
 net.Socket.prototype.connect = function() {
+  console.log('Socket.connect');
   var self = this;
   var options = {};
   var args = arguments;
@@ -571,7 +576,7 @@ net.Socket.prototype.connect = function() {
     // we have an options object.
     options.port = args[0].port;
     options.host = args[0].host || "127.0.0.1";
-  } 
+  }
   else if (typeof args[0] === 'string') {
     // throw an error, we can't do named pipes.
   }
@@ -591,7 +596,7 @@ net.Socket.prototype.connect = function() {
   chrome.socket.connect(self._socketInfo.socketId, options.host, options.port, function(result) {
     if(result == 0) {
       self.emit('connect');
-    } 
+    }
     else {
       self.emit('error', new Error("Unable to connect"));
     }
@@ -619,9 +624,11 @@ net.Socket.prototype.setKeepAlive = function(enable, delay) {
 };
 
 net.Socket.prototype._read = function() {
+  // console.log('Socket._read');
   var self = this;
   chrome.socket.read(self._socketInfo.socketId, function(readInfo) {
-    if(readInfo.resultCode < 0) return; 
+    // console.log('Socket._read - mchrome.socket.read');
+    if(readInfo.resultCode < 0) return;
     // ArrayBuffer to Buffer if no encoding.
     var buffer = arrayBufferToBuffer(readInfo.data);
     self.emit('data', buffer);
@@ -629,9 +636,10 @@ net.Socket.prototype._read = function() {
 
   // enque another read soon. TODO: Is there are better way to controll speed.
   self._readTimer = setTimeout(self._read.bind(self), 100);
-}
+};
 
 net.Socket.prototype.write = function(data, encoding, callback) {
+  console.log('Socket.write');
   var buffer;
   var self = this;
   
@@ -651,7 +659,7 @@ net.Socket.prototype.write = function(data, encoding, callback) {
   self._resetTimeout();
 
   chrome.socket.write(self._socketInfo.socketId, buffer, function(writeInfo) {
-    callback(); 
+    callback();
   });
 
   return true;
@@ -3988,7 +3996,7 @@ function base64DetectIncompleteChar(buffer) {
 
 require.alias("net-browserify", "/node_modules/net");
 
-require.define("/index.js",function(require,module,exports,__dirname,__filename,process){// Copyright Joyent, Inc. and other Node contributors.
+require.define("/http.js",function(require,module,exports,__dirname,__filename,process){// Copyright Joyent, Inc. and other Node contributors.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
 // copy of this software and associated documentation files (the
@@ -5597,6 +5605,7 @@ function ondrain() {
 
 
 function httpSocketSetup(socket) {
+  console.log('httpSocketSetup');
   socket.removeListener('drain', ondrain);
   socket.on('drain', ondrain);
 }
@@ -5616,6 +5625,8 @@ function Server(requestListener) {
   this.httpAllowHalfOpen = false;
 
   this.addListener('connection', connectionListener);
+  console.log('function Server', this);
+  // net.createServer(requestListener);
 }
 util.inherits(Server, net.Server);
 
@@ -5650,7 +5661,7 @@ function connectionListener(socket) {
     abortIncoming();
   }
 
-  debug('SERVER new http connection');
+  console.log('SERVER new http connection');
 
   httpSocketSetup(socket);
 
@@ -5678,6 +5689,7 @@ function connectionListener(socket) {
   });
 
   socket.ondata = function(d, start, end) {
+    console.log('ondata');
     var ret = parser.execute(d, start, end - start);
     if (ret instanceof Error) {
       debug('parse error');
@@ -5733,6 +5745,7 @@ function connectionListener(socket) {
   // new message. In this callback we setup the response object and pass it
   // to the user.
   parser.onIncoming = function(req, shouldKeepAlive) {
+    console.log('onincoming');
     incoming.push(req);
 
     var res = new ServerResponse(req);
@@ -5831,5 +5844,5 @@ Client.prototype.request = function(method, path, headers) {
 };
 
 });
-require("/index.js");
+require("/http.js");
 
