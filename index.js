@@ -24,10 +24,27 @@ var net = require('net');
 var Stream = require('stream');
 var url = require('url');
 var EventEmitter = require('events').EventEmitter;
-var FreeList = require('freelist').FreeList;
-var HTTPParser = process.binding('http_parser').HTTPParser;
+var FreeList = require('./lib/freelist').FreeList;
+// var HTTPParser = process.binding('./lib/http_parser').HTTPParser;
 var assert = require('assert').ok;
 var END_OF_FILE = {};
+
+var HTTPParser = function(){
+
+};
+
+HTTPParser.prototype.reinitialize = function(a){
+  console.log('HTTPParser reinitializing',a);
+};
+
+HTTPParser.prototype.finish = function(a){
+  console.log('HTTPParser finishing',a);
+};
+
+HTTPParser.prototype.execute = function(a,b,c){
+  console.log('HTTPParser executing',a);
+};
+
 
 var debug;
 if (process.env.NODE_DEBUG && /http/.test(process.env.NODE_DEBUG)) {
@@ -301,7 +318,7 @@ IncomingMessage.prototype.destroy = function(error) {
 
 
 IncomingMessage.prototype.setEncoding = function(encoding) {
-  var StringDecoder = require('string_decoder').StringDecoder; // lazy load
+  var StringDecoder = require('./lib/string_decoder').StringDecoder; // lazy load
   this._decoder = new StringDecoder(encoding);
 };
 

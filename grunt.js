@@ -7,10 +7,7 @@ module.exports = function(grunt) {
     options: {
       exports: ['require'],
       require: {
-        net: 'net-browserify',
-        freelist: './lib/freelist',
-        string_decoder: './lib/string_decoder',
-        http_parser: './lib/http_parser'
+        net: 'net-browserify'
       }
     }
   };
