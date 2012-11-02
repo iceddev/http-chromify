@@ -25,7 +25,7 @@ var Stream = require('stream');
 var url = require('url');
 var EventEmitter = require('events').EventEmitter;
 var FreeList = require('./lib/freelist').FreeList;
-// var HTTPParser = process.binding('./lib/http_parser').HTTPParser;
+var HTTPParser = require('http-parser-js').HTTPParser;
 var assert = require('assert').ok;
 var END_OF_FILE = {};
 
