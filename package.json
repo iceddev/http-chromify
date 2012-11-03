@@ -1,27 +1,24 @@
 {
-  "name": "net-browserify",
+  "name": "http-chromify",
   "version": "0.0.1",
-  "description": "A module that maps chrome net API's to node net namespace",
+  "description": "A module that maps chrome net API's to node http namespace",
   "main": "index.js",
   "repository": {
     "type": "git",
-    "url": "http://github.com/paulkinlan/net-browserify.git"
+    "url": "http://github.com/iceddev/http-chromify.git"
   },
   "keywords": [
-    "net",
+    "http",
     "browser",
     "eval"
   ],
   "devDependencies": {
-    "browserify": "1.16.x",
-    "grunt-browserify": "~0.1.0",
-    "http-parser-js": "0.0.0",
-    "net-browserify": "git://github.com/PaulKinlan/net-browserify.git"
+    "browserify": "1.16.x"
   },
   "author": {
-    "name": "Luis Montes",
-    "email": "monteslu@gmail.com",
-    "url": "http://www.iceddev.com"
+    "name": "Blaine Bublitz",
+    "email": "blaine@iceddev.com",
+    "url": "http://iceddev.com"
   },
   "license": "Apache2",
   "engine": {

@@ -24,11 +24,17 @@ var net = require('net');
 var Stream = require('stream');
 var url = require('url');
 var EventEmitter = require('events').EventEmitter;
-var FreeList = require('./lib/freelist').FreeList;
-var HTTPParser = require('http-parser-js').HTTPParser;
+var FreeList = require('freelist').FreeList;
+var HTTPParser = require('http_parser').HTTPParser;
 var assert = require('assert').ok;
 var END_OF_FILE = {};
 
+// STUBS
+var DTRACE_HTTP_SERVER_REQUEST = function(){};
+var DTRACE_HTTP_SERVER_RESPONSE = function(){};
+
+// Extra requires
+var Buffer = require('buffer').Buffer;
 
 
 var debug;
@@ -303,7 +309,7 @@ IncomingMessage.prototype.destroy = function(error) {
 
 
 IncomingMessage.prototype.setEncoding = function(encoding) {
-  var StringDecoder = require('./lib/string_decoder').StringDecoder; // lazy load
+  var StringDecoder = require('string_decoder').StringDecoder; // lazy load
   this._decoder = new StringDecoder(encoding);
 };
 
@@ -801,7 +807,11 @@ OutgoingMessage.prototype.end = function(data, encoding) {
 
   } else if (data) {
     // Normal body write.
-    ret = this.write(data, encoding);
+    var self = this;
+
+    ret = this.socket.write(data, encoding, function(){
+      self.emit('finish');
+    });
   }
 
   if (!hot) {
@@ -1628,7 +1638,6 @@ function Server(requestListener) {
 
   this.addListener('connection', connectionListener);
   console.log('function Server', this);
-  // net.createServer(requestListener);
 }
 util.inherits(Server, net.Server);
 

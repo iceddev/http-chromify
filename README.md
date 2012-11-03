@@ -1,5 +1,5 @@
-http-browserify
-=====================
+http-chromify
+=============
 
 To build into a script `browserify index.js -o example/plugin/chromenode.js --exports require`
 
